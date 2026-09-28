@@ -28,7 +28,7 @@ export function AppShell({ onVolverAlInicio, children }: AppShellProps) {
         </button>
       </header>
 
-      <main className="grid min-h-0 flex-1 grid-cols-3 gap-4 overflow-hidden p-4">{children}</main>
+      <main className="task-layout grid min-h-0 flex-1 gap-4 p-4">{children}</main>
     </div>
   );
 }

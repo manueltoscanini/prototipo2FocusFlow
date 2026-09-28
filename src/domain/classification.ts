@@ -1,10 +1,8 @@
-import type { CriterionId, Email, TipoError } from './types';
+import type { CriterionId, ResponseId, TipoError } from './types';
 
 export interface ClassificationAttempt {
-  email: Email;
   criterioVigente: CriterionId;
-  pestanaActiva: CriterionId;
-  carpetaDestino: string;
+  botonRespuesta: ResponseId;
 }
 
 export interface ClassificationResult {
@@ -13,18 +11,11 @@ export interface ClassificationResult {
 }
 
 /**
- * Una clasificación es correcta únicamente si la pestaña activa coincide con el
- * criterio vigente del bloque Y la carpeta elegida coincide con la categoría
- * correcta del correo bajo ese criterio.
+ * Solo la regla activa es válida, aunque el correo cumpla otros dos atributos.
  */
 export function evaluarClasificacion(intento: ClassificationAttempt): ClassificationResult {
-  if (intento.pestanaActiva !== intento.criterioVigente) {
+  if (intento.botonRespuesta !== intento.criterioVigente) {
     return { correcto: false, tipoError: 'criterio_incorrecto' };
-  }
-
-  const categoriaCorrecta = intento.email.clasificacion[intento.criterioVigente];
-  if (intento.carpetaDestino !== categoriaCorrecta) {
-    return { correcto: false, tipoError: 'categoria_incorrecta' };
   }
 
   return { correcto: true, tipoError: 'ninguno' };

@@ -1,72 +1,27 @@
-const MESES = [
-  'enero',
-  'febrero',
-  'marzo',
-  'abril',
-  'mayo',
-  'junio',
-  'julio',
-  'agosto',
-  'septiembre',
-  'octubre',
-  'noviembre',
-  'diciembre',
-];
+import { ZONA_HORARIA_SESION } from './attributes';
 
-const MS_POR_DIA = 24 * 60 * 60 * 1000;
+export type FechaRelativa = 'hoy' | 'anterior';
 
-interface FechaCorpusParseada {
-  dia: number;
-  mes: number;
-  hora: number;
-  minuto: number;
+const formatoHora = new Intl.DateTimeFormat('es-UY', {
+  timeZone: ZONA_HORARIA_SESION, hourCycle: 'h23',
+  hour: '2-digit', minute: '2-digit', second: '2-digit',
+});
+
+/** Fechas relativas al inicio, independientes de la zona horaria del navegador. */
+export function crearFechaCorreo(tipo: FechaRelativa, indice: number, referencia: Date): string {
+  const partes = formatoHora.formatToParts(referencia);
+  const valor = (tipoParte: string) => Number(partes.find(p => p.type === tipoParte)!.value);
+  const desdeMedianocheMs = ((valor('hour') * 60 + valor('minute')) * 60 + valor('second')) * 1000
+    + referencia.getUTCMilliseconds();
+  const antiguedadMs = tipo === 'hoy'
+    ? Math.min((indice + 1) * 13 * 60_000, desdeMedianocheMs)
+    : (1 + indice % 7) * 86_400_000;
+  return new Date(referencia.getTime() - antiguedadMs).toISOString();
 }
 
-function parsearFechaCorpus(fechaTexto: string): FechaCorpusParseada {
-  const match = fechaTexto.match(/^(\d{1,2}) de (\p{L}+), (\d{1,2}):(\d{2})$/u);
-  if (!match) {
-    throw new Error(`No se pudo interpretar la fecha de corpus: "${fechaTexto}"`);
-  }
-  const [, diaStr, mesNombre, horaStr, minutoStr] = match;
-  const mes = MESES.indexOf(mesNombre.toLowerCase());
-  if (mes === -1) {
-    throw new Error(`Mes desconocido en fecha de corpus: "${fechaTexto}"`);
-  }
-  return { dia: Number(diaStr), mes, hora: Number(horaStr), minuto: Number(minutoStr) };
-}
-
-/**
- * Reproyecta una fecha de corpus —escrita a mano contra `anclaCorpusISO`,
- * fija— a la misma distancia en días desde `referenciaSesion` (hoy), para
- * que el corpus siempre luzca actual sin reescribir su contenido. La hora
- * del correo se conserva tal cual fue redactada.
- */
-export function proyectarFechaCorreo(
-  fechaTexto: string,
-  anclaCorpusISO: string,
-  referenciaSesion: Date,
-): string {
-  const anclaCorpus = new Date(anclaCorpusISO);
-  const { dia, mes, hora, minuto } = parsearFechaCorpus(fechaTexto);
-
-  // El corpus solo contiene fechas iguales o anteriores al ancla; si el mes
-  // quedara "después" del mes de ancla (o el mismo mes pero un día
-  // posterior), pertenece al año calendario previo.
-  let anio = anclaCorpus.getFullYear();
-  const esAnioPrevio =
-    mes > anclaCorpus.getMonth() || (mes === anclaCorpus.getMonth() && dia > anclaCorpus.getDate());
-  if (esAnioPrevio) anio -= 1;
-
-  const fechaOriginalMedianoche = new Date(anio, mes, dia);
-  const anclaMedianoche = new Date(anclaCorpus.getFullYear(), anclaCorpus.getMonth(), anclaCorpus.getDate());
-  const offsetDias = Math.round(
-    (fechaOriginalMedianoche.getTime() - anclaMedianoche.getTime()) / MS_POR_DIA,
-  );
-
-  const fechaProyectada = new Date(referenciaSesion);
-  fechaProyectada.setDate(fechaProyectada.getDate() + offsetDias);
-
-  const horaTxt = String(hora).padStart(2, '0');
-  const minutoTxt = String(minuto).padStart(2, '0');
-  return `${fechaProyectada.getDate()} de ${MESES[fechaProyectada.getMonth()]}, ${horaTxt}:${minutoTxt}`;
+export function formatearFechaCorreo(fechaISO: string, breve = false): string {
+  return new Intl.DateTimeFormat('es-UY', { timeZone: ZONA_HORARIA_SESION, ...(breve
+    ? { day: 'numeric', month: 'short' }
+    : { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' }
+  ) }).format(new Date(fechaISO));
 }

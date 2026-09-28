@@ -1,394 +1,300 @@
-import { proyectarFechaCorreo } from '../domain/fechaCorreo';
+import { crearFechaCorreo, type FechaRelativa } from '../domain/fechaCorreo';
+import { atributosCorreo } from '../domain/attributes';
 import type { Email } from '../domain/types';
-import { CATEGORIA_DEPARTAMENTO, CATEGORIA_FECHA, CATEGORIA_PRIORIDAD } from './criteria.config';
 import { SESSION_CONFIG } from './session.config';
 
-/**
- * Corpus de 24 correos, 8 por bloque, sin repetición entre bloques.
- * Cada correo tiene asignada su categoría correcta bajo los tres criterios a
- * la vez (fecha, prioridad, departamento), como una carta del Berg tiene
- * color, forma y número simultáneamente.
- *
- * La distribución está balanceada 2/2/2/2 en las tres dimensiones dentro de
- * cada bloque (y por lo tanto también en el corpus completo), para que
- * ninguna carpeta quede sin uso y no se pueda acertar por frecuencia.
- *
- * Las fechas de abajo están escritas contra SESSION_CONFIG.anclaCorpusISO
- * (17 de marzo de 2026) — ver session.config.ts. `CORPUS_POR_BLOQUE`, al
- * final del archivo, exporta esas fechas reproyectadas contra la fecha real
- * de hoy, para que la bandeja siempre luzca actual sin tener que reescribir
- * el corpus.
- */
+/** 24 mensajes distintos. Las fechas se materializan solo al iniciar cada sesión. */
+type PlantillaCorreo = Omit<Email, 'fechaISO' | 'destinatario'> & { fechaRelativa: FechaRelativa };
 
-const CORPUS_BLOQUE_1: Email[] = [
+const CORPUS_BLOQUE_1: PlantillaCorreo[] = [
   {
     id: 'b1c1',
     remitente: 'María González',
-    emailRemitente: 'maria.gonzalez@empresa.com',
+    emailRemitente: 'maria.gonzalez@ucu.edu.uy',
     asunto: 'Solicitud de licencia médica',
-    fechaTexto: '17 de marzo, 09:24',
+    fechaRelativa: 'hoy',
+    prioridad: 'baja',
     cuerpo:
-      'Hola,\n\nQuisiera solicitar licencia médica por dos días, desde el 18 al 19 de marzo, ya que debo realizarme estudios indicados por mi médico. Adjunto el certificado correspondiente y quedo a disposición por cualquier información adicional.\n\nAgradezco si pueden confirmar la recepción de la documentación y los pasos a seguir.\n\nSaludos,\nMaría González',
-    adjunto: { nombre: 'certificado_medico.pdf', tamano: '156 KB' },
-    clasificacion: {
-      fecha: CATEGORIA_FECHA.HOY,
-      prioridad: CATEGORIA_PRIORIDAD.PRIORITARIO,
-      departamento: CATEGORIA_DEPARTAMENTO.RRHH,
-    },
+      'Hola,\n\nQuisiera solicitar dos días de licencia médica para realizarme los estudios indicados por mi médico. Les envío el certificado para que puedan revisar la solicitud cuando tengan disponibilidad.\n\nQuedo a disposición por cualquier información adicional.\n\nSaludos,\nMaría González',
+    adjuntos: [{ nombre: 'certificado_medico.pdf', tamano: '156 KB' }],
   },
   {
     id: 'b1c2',
     remitente: 'Diego Aramburu',
-    emailRemitente: 'diego.aramburu@empresa.com',
+    emailRemitente: 'diego.aramburu@ucu.edu.uy',
     asunto: 'No puedo acceder a la VPN',
-    fechaTexto: '17 de marzo, 08:15',
+    fechaRelativa: 'hoy',
+    prioridad: 'alta',
     cuerpo:
       'Hola,\n\nDesde esta mañana no logro conectarme a la VPN y necesito entrar al servidor de proyectos para una entrega de hoy al mediodía. Ya probé reiniciar el cliente y cambiar de red, pero sigue sin funcionar.\n\n¿Me pueden ayudar lo antes posible? Se me complica bastante si no lo resuelvo en la próxima hora.\n\nGracias,\nDiego Aramburu',
-    clasificacion: {
-      fecha: CATEGORIA_FECHA.HOY,
-      prioridad: CATEGORIA_PRIORIDAD.URGENTE,
-      departamento: CATEGORIA_DEPARTAMENTO.SOPORTE_TECNICO,
-    },
+    adjuntos: [],
   },
   {
     id: 'b1c3',
     remitente: 'Lucía Ferreyra',
-    emailRemitente: 'lucia.ferreyra@empresa.com',
+    emailRemitente: 'lucia.ferreyra@ucu.edu.uy',
     asunto: 'Pago a proveedor vence hoy, riesgo de corte',
-    fechaTexto: '16 de marzo, 17:40',
+    fechaRelativa: 'anterior',
+    prioridad: 'alta',
     cuerpo:
-      'Hola,\n\nEl proveedor de energía nos avisó que si no acreditamos el pago pendiente antes de las 18 h de hoy, procede a cortar el suministro de la planta. Necesito que alguien autorice la transferencia con urgencia, ya está todo cargado en el sistema.\n\nCualquier demora nos deja sin producción mañana. Quedo atenta.\n\nSaludos,\nLucía Ferreyra',
-    clasificacion: {
-      fecha: CATEGORIA_FECHA.ESTA_SEMANA,
-      prioridad: CATEGORIA_PRIORIDAD.URGENTE,
-      departamento: CATEGORIA_DEPARTAMENTO.FINANZAS,
-    },
+      'Hola,\n\nEl proveedor de energía nos avisó que si no acreditamos el pago pendiente antes de las 18 h de hoy, procede a cortar el suministro del campus. Necesito que alguien autorice la transferencia con urgencia, ya está todo cargado en el sistema.\n\nCualquier demora nos deja sin actividad mañana. Quedo atenta.\n\nSaludos,\nLucía Ferreyra',
+    adjuntos: [{ nombre: 'aviso_suministro.pdf', tamano: '184 KB' }],
   },
   {
     id: 'b1c4',
     remitente: 'Martín Sosa',
-    emailRemitente: 'martin.sosa@empresa.com',
+    emailRemitente: 'martin.sosa@ucu.edu.uy',
     asunto: '¿Sumamos un pedido de café para la oficina?',
-    fechaTexto: '16 de marzo, 10:05',
+    fechaRelativa: 'hoy',
+    prioridad: 'baja',
     cuerpo:
-      'Hola,\n\nEstoy por hacer un pedido grande de café e insumos para la cocina, ¿alguien más quiere sumar algo antes de que cierre el pedido? Si es así, avisenme antes del mediodía.\n\nAprovecho que el proveedor tiene descuento por cantidad esta semana.\n\nSaludos,\nMartín',
-    clasificacion: {
-      fecha: CATEGORIA_FECHA.ESTA_SEMANA,
-      prioridad: CATEGORIA_PRIORIDAD.PERSONAL,
-      departamento: CATEGORIA_DEPARTAMENTO.COMPRAS,
-    },
+      'Hola,\n\nEstoy preparando un pedido de café e insumos para la cocina. Les comparto la planilla con las cantidades estimadas para que puedan agregar sugerencias.\n\nTenemos margen para revisar las opciones antes de enviar el pedido al proveedor.\n\nSaludos,\nMartín',
+    adjuntos: [{ nombre: 'pedido_cocina.xlsx', tamano: '42 KB' }],
   },
   {
     id: 'b1c5',
     remitente: 'Valentina Ríos',
-    emailRemitente: 'valentina.rios@empresa.com',
+    emailRemitente: 'valentina.rios@ucu.edu.uy',
     asunto: 'Factura 0345 pendiente de tu aprobación',
-    fechaTexto: '5 de marzo, 11:30',
+    fechaRelativa: 'anterior',
+    prioridad: 'alta',
     cuerpo:
-      'Hola,\n\nTe escribo porque la factura 0345 del proveedor de insumos sigue pendiente de aprobación en el sistema y el vencimiento es la semana que viene. Adjunto el PDF para que lo puedas revisar con tiempo.\n\n¿Podés confirmarme cuando quede aprobada para programar el pago?\n\nGracias,\nValentina Ríos',
-    adjunto: { nombre: 'factura_0345.pdf', tamano: '212 KB' },
-    clasificacion: {
-      fecha: CATEGORIA_FECHA.ESTE_MES,
-      prioridad: CATEGORIA_PRIORIDAD.PRIORITARIO,
-      departamento: CATEGORIA_DEPARTAMENTO.FINANZAS,
-    },
+      'Hola,\n\nLa factura 0345 sigue pendiente de aprobación y el proveedor suspendió los nuevos despachos. Les envío el PDF para que puedan revisarlo y autorizar el pago cuanto antes.\n\nNecesitamos liberar la entrega de insumos para retomar las actividades.\n\nGracias,\nValentina Ríos',
+    adjuntos: [{ nombre: 'factura_0345.pdf', tamano: '212 KB' }],
   },
   {
     id: 'b1c6',
-    remitente: 'Seguridad Total Antivirus',
-    emailRemitente: 'promociones@seguridadtotal-corp.com',
-    asunto: 'Aprovechá 40% OFF en licencias antivirus para tu empresa',
-    fechaTexto: '9 de marzo, 14:00',
+    remitente: 'Paula Méndez',
+    emailRemitente: 'paula.mendez@ucu.edu.uy',
+    asunto: 'Renovación de protección de los equipos',
+    fechaRelativa: 'hoy',
+    prioridad: 'alta',
     cuerpo:
-      'Estimado cliente,\n\nAprovechá nuestra promoción exclusiva de marzo: licencias antivirus corporativas con 40% de descuento por tiempo limitado, incluye soporte 24/7 y protección para todos tus dispositivos.\n\nEscribinos para conocer todos los planes disponibles antes de que termine la oferta.\n\nEquipo Comercial,\nSeguridad Total Antivirus',
-    adjunto: { nombre: 'catalogo_seguridad.pdf', tamano: '1,1 MB' },
-    clasificacion: {
-      fecha: CATEGORIA_FECHA.ESTE_MES,
-      prioridad: CATEGORIA_PRIORIDAD.SPAM,
-      departamento: CATEGORIA_DEPARTAMENTO.SOPORTE_TECNICO,
-    },
+      'Hola,\n\nEl servicio de protección de las notebooks vence al cierre del día. Necesito que autoricen la renovación en el portal de compras para evitar que los equipos queden sin cobertura.\n\nEl número de solicitud es 2048 y ya está validado por Sistemas.\n\nGracias,\nPaula',
+    adjuntos: [],
   },
   {
     id: 'b1c7',
     remitente: 'Nicolás Pereyra',
-    emailRemitente: 'nicolas.pereyra@empresa.com',
+    emailRemitente: 'nicolas.pereyra@ucu.edu.uy',
     asunto: 'Colecta para el regalo de Marisa',
-    fechaTexto: '22 de enero, 16:20',
+    fechaRelativa: 'hoy',
+    prioridad: 'baja',
     cuerpo:
       'Hola,\n\nOrganizamos una colecta para el regalo de despedida de Marisa, que se jubila a fin de mes. Si querés sumarte, avisame y te paso el alias.\n\nLa idea es juntar todo antes de su último día e ir a comer algo entre todos.\n\nUn abrazo,\nNicolás',
-    clasificacion: {
-      fecha: CATEGORIA_FECHA.MAS_DE_UN_MES,
-      prioridad: CATEGORIA_PRIORIDAD.PERSONAL,
-      departamento: CATEGORIA_DEPARTAMENTO.RRHH,
-    },
+    adjuntos: [{ nombre: 'colecta_despedida.xlsx', tamano: '28 KB' }],
   },
   {
     id: 'b1c8',
-    remitente: 'Insumos del Plata',
-    emailRemitente: 'ofertas@insumosdelplata.com.ar',
-    asunto: 'Descuentos de verano en insumos de oficina',
-    fechaTexto: '9 de febrero, 09:50',
+    remitente: 'Pablo Silva',
+    emailRemitente: 'pablo.silva@ucu.edu.uy',
+    asunto: 'Reposición de insumos para impresión',
+    fechaRelativa: 'anterior',
+    prioridad: 'alta',
     cuerpo:
-      'Estimados,\n\nLes acercamos nuestro catálogo de verano con precios especiales en resmas, tóners y artículos de librería para empresas. Válido hasta agotar stock.\n\nConsultanos por pedidos mayoristas y condiciones de pago a 30 días.\n\nSaludos cordiales,\nEquipo Comercial — Insumos del Plata',
-    clasificacion: {
-      fecha: CATEGORIA_FECHA.MAS_DE_UN_MES,
-      prioridad: CATEGORIA_PRIORIDAD.SPAM,
-      departamento: CATEGORIA_DEPARTAMENTO.COMPRAS,
-    },
+      'Hola,\n\nSe agotó el tóner de la impresora de despacho y no podemos emitir las etiquetas de los envíos. Les comparto la solicitud de reposición con los modelos compatibles.\n\nNecesitamos autorizar la compra cuanto antes para liberar los pedidos que están esperando.\n\nSaludos,\nPablo',
+    adjuntos: [{ nombre: 'reposicion_insumos.pdf', tamano: '116 KB' }],
   },
 ];
 
-const CORPUS_BLOQUE_2: Email[] = [
+const CORPUS_BLOQUE_2: PlantillaCorreo[] = [
   {
     id: 'b2c1',
     remitente: 'Camila Duarte',
-    emailRemitente: 'camila.duarte@empresa.com',
+    emailRemitente: 'camila.duarte@ucu.edu.uy',
     asunto: 'El sistema de pagos está caído, no podemos pagar a nadie',
-    fechaTexto: '17 de marzo, 10:50',
+    fechaRelativa: 'hoy',
+    prioridad: 'alta',
     cuerpo:
       'Hola,\n\nEl sistema de pagos se cayó hace media hora y tenemos tres transferencias a proveedores que vencen hoy. Ya avisé a soporte pero necesito que alguien lo escale porque si no pagamos antes de las 16 h perdemos las condiciones acordadas.\n\n¿Podés ayudarme a destrabar esto?\n\nGracias,\nCamila Duarte',
-    clasificacion: {
-      fecha: CATEGORIA_FECHA.HOY,
-      prioridad: CATEGORIA_PRIORIDAD.URGENTE,
-      departamento: CATEGORIA_DEPARTAMENTO.FINANZAS,
-    },
+    adjuntos: [],
   },
   {
     id: 'b2c2',
     remitente: 'Federico Lombardi',
-    emailRemitente: 'federico.lombardi@empresa.com',
+    emailRemitente: 'federico.lombardi@ucu.edu.uy',
     asunto: 'Tercer aviso: seguimos sin acceso al sistema de tickets',
-    fechaTexto: '16 de marzo, 09:10',
+    fechaRelativa: 'anterior',
+    prioridad: 'alta',
     cuerpo:
-      'Hola,\n\nEsta es la tercera vez que escribo por el mismo problema: todo el equipo de atención al cliente sigue sin poder entrar al sistema de tickets desde el lunes. Ya perdimos dos días de seguimiento a reclamos de clientes.\n\nNecesitamos una solución hoy mismo, esto ya está afectando el servicio.\n\nSaludos,\nFederico Lombardi',
-    clasificacion: {
-      fecha: CATEGORIA_FECHA.ESTA_SEMANA,
-      prioridad: CATEGORIA_PRIORIDAD.URGENTE,
-      departamento: CATEGORIA_DEPARTAMENTO.SOPORTE_TECNICO,
-    },
+      'Hola,\n\nEsta es la tercera vez que escribo por el mismo problema: todo el equipo de atención al cliente sigue sin poder entrar al sistema de tickets. Les envío el registro de incidencias del servicio.\n\nNecesitamos una solución inmediata, esto ya está afectando el seguimiento de reclamos.\n\nSaludos,\nFederico Lombardi',
+    adjuntos: [{ nombre: 'incidencias_tickets.pdf', tamano: '220 KB' }],
   },
   {
     id: 'b2c3',
     remitente: 'Sofía Bianchi',
-    emailRemitente: 'sofia.bianchi@empresa.com',
-    asunto: 'Recordatorio: evaluación de desempeño pendiente',
-    fechaTexto: '3 de marzo, 15:15',
+    emailRemitente: 'sofia.bianchi@formacionrrhh-online.com',
+    asunto: 'Falta validar las inscripciones del equipo',
+    fechaRelativa: 'hoy',
+    prioridad: 'alta',
     cuerpo:
-      'Hola,\n\nTe recuerdo que todavía no completaste el formulario de autoevaluación de desempeño correspondiente a este semestre. Adjunto el archivo por si no lo tenés a mano.\n\nEl plazo cierra a fin de mes, así que te pido que lo envíes con tiempo para poder coordinar la devolución con tu líder.\n\nGracias,\nSofía Bianchi',
-    adjunto: { nombre: 'formulario_autoevaluacion.pdf', tamano: '98 KB' },
-    clasificacion: {
-      fecha: CATEGORIA_FECHA.ESTE_MES,
-      prioridad: CATEGORIA_PRIORIDAD.PRIORITARIO,
-      departamento: CATEGORIA_DEPARTAMENTO.RRHH,
-    },
+      'Hola,\n\nNecesitamos validar las inscripciones del equipo para habilitar el acceso a la capacitación. Les envío el formulario con los datos pendientes.\n\nEl aula se abre en unas horas; por favor devuélvanlo completo cuanto antes para evitar que alguien quede sin acceso.\n\nGracias,\nSofía Bianchi',
+    adjuntos: [{ nombre: 'formulario_autoevaluacion.pdf', tamano: '98 KB' }],
   },
   {
     id: 'b2c4',
     remitente: 'Tomás Acosta',
-    emailRemitente: 'tomas.acosta@empresa.com',
+    emailRemitente: 'tomas.acosta@ucu.edu.uy',
     asunto: 'Seguimiento: orden de compra de equipamiento sin confirmar',
-    fechaTexto: '30 de enero, 13:25',
+    fechaRelativa: 'anterior',
+    prioridad: 'alta',
     cuerpo:
-      'Hola,\n\nTe escribo por la orden de compra 0128 de las notebooks nuevas, que todavía figura sin confirmar por parte del proveedor. Ya pasó bastante tiempo desde el pedido inicial y el equipo la está esperando.\n\nAdjunto la orden para que la tengas a mano. ¿Podés confirmarme el estado esta semana?\n\nSaludos,\nTomás Acosta',
-    adjunto: { nombre: 'orden_compra_0128.pdf', tamano: '145 KB' },
-    clasificacion: {
-      fecha: CATEGORIA_FECHA.MAS_DE_UN_MES,
-      prioridad: CATEGORIA_PRIORIDAD.PRIORITARIO,
-      departamento: CATEGORIA_DEPARTAMENTO.COMPRAS,
-    },
+      'Hola,\n\nEl proveedor no confirmó la orden de compra 0128 y el equipo necesita las notebooks para comenzar la capacitación. Les envío la orden pendiente.\n\nPor favor contacten al proveedor de inmediato: sin esa confirmación perdemos la reserva del equipamiento.\n\nSaludos,\nTomás Acosta',
+    adjuntos: [{ nombre: 'orden_compra_0128.pdf', tamano: '145 KB' }],
   },
   {
     id: 'b2c5',
     remitente: 'Julieta Medina',
-    emailRemitente: 'julieta.medina@empresa.com',
+    emailRemitente: 'julieta.medina@ucu.edu.uy',
     asunto: '¿Me prestás un cargador tipo C?',
-    fechaTexto: '17 de marzo, 13:05',
+    fechaRelativa: 'hoy',
+    prioridad: 'alta',
     cuerpo:
       'Holaa, disculpá la molestia. Se me quedó el cargador de la notebook en casa y tengo una reunión en veinte minutos. ¿Tenés uno tipo C que me puedas prestar hasta la tarde?\n\nTe lo devuelvo antes de irme, prometido.\n\nGracias!\nJulieta',
-    clasificacion: {
-      fecha: CATEGORIA_FECHA.HOY,
-      prioridad: CATEGORIA_PRIORIDAD.PERSONAL,
-      departamento: CATEGORIA_DEPARTAMENTO.SOPORTE_TECNICO,
-    },
+    adjuntos: [],
   },
   {
     id: 'b2c6',
     remitente: 'Agustín Rossi',
-    emailRemitente: 'agustin.rossi@empresa.com',
-    asunto: 'Reintegro del asado del viernes',
-    fechaTexto: '16 de marzo, 18:30',
+    emailRemitente: 'agustin.rossi@bancorioplatense.com.ar',
+    asunto: 'Transferencia retenida: documentación pendiente',
+    fechaRelativa: 'hoy',
+    prioridad: 'alta',
     cuerpo:
-      'Hola,\n\nTe paso el resumen de lo que gastamos entre todos para el asado del viernes, para que me reintegres tu parte cuando puedas. Fueron 4200 pesos por persona, incluyendo bebidas.\n\nCualquier cosa avisame si el número no te cierra.\n\nSaludos,\nAgustín',
-    clasificacion: {
-      fecha: CATEGORIA_FECHA.ESTA_SEMANA,
-      prioridad: CATEGORIA_PRIORIDAD.PERSONAL,
-      departamento: CATEGORIA_DEPARTAMENTO.FINANZAS,
-    },
+      'Hola,\n\nLa transferencia a su proveedor quedó retenida por un dato incompleto. Les envío el detalle de la operación para que validen la cuenta de destino.\n\nNecesitamos su respuesta antes del cierre bancario para evitar que se cancele el pago.\n\nSaludos,\nAgustín Rossi',
+    adjuntos: [{ nombre: 'detalle_transferencia.pdf', tamano: '165 KB' }],
   },
   {
     id: 'b2c7',
-    remitente: 'Formación RRHH Online',
-    emailRemitente: 'info@formacionrrhh-online.com',
-    asunto: 'Últimos cupos: curso online de liderazgo y gestión de personas',
-    fechaTexto: '13 de marzo, 08:40',
+    remitente: 'Elena Suárez',
+    emailRemitente: 'elena.suarez@ucu.edu.uy',
+    asunto: 'Confirmación de capacitación obligatoria',
+    fechaRelativa: 'anterior',
+    prioridad: 'alta',
     cuerpo:
-      'Estimado/a,\n\nTe escribimos para contarte que quedan últimos cupos para nuestro curso online de liderazgo y gestión de recursos humanos, con certificado incluido. Ideal para equipos de RRHH que buscan actualizarse.\n\nInscribite antes de fin de mes y accedé a un descuento especial por inscripción anticipada.\n\nEquipo de Formación RRHH Online',
-    adjunto: { nombre: 'brochure_curso.pdf', tamano: '2,4 MB' },
-    clasificacion: {
-      fecha: CATEGORIA_FECHA.ESTE_MES,
-      prioridad: CATEGORIA_PRIORIDAD.SPAM,
-      departamento: CATEGORIA_DEPARTAMENTO.RRHH,
-    },
+      'Hola,\n\nNecesitamos confirmar de inmediato la participación del equipo en la capacitación de seguridad. Les envío el programa y los requisitos del curso.\n\nSin esta confirmación no podremos habilitar los accesos al campus para el próximo turno.\n\nGracias,\nElena',
+    adjuntos: [{ nombre: 'brochure_curso.pdf', tamano: '2,4 MB' }],
   },
   {
     id: 'b2c8',
     remitente: 'Oficina Total',
     emailRemitente: 'promos@oficinatotal.com.ar',
-    asunto: 'Renová el mobiliario de tu oficina con hasta 25% OFF',
-    fechaTexto: '12 de febrero, 11:00',
+    asunto: 'Entrega detenida por diferencia en el pedido',
+    fechaRelativa: 'hoy',
+    prioridad: 'alta',
     cuerpo:
-      'Estimados,\n\nDescubrí nuestra nueva línea de sillas y escritorios ergonómicos para oficinas, con hasta 25% de descuento por compras corporativas durante este mes.\n\nEscribinos para coordinar una visita a nuestro showroom o pedir un presupuesto sin compromiso.\n\nSaludos,\nOficina Total',
-    clasificacion: {
-      fecha: CATEGORIA_FECHA.MAS_DE_UN_MES,
-      prioridad: CATEGORIA_PRIORIDAD.SPAM,
-      departamento: CATEGORIA_DEPARTAMENTO.COMPRAS,
-    },
+      'Estimados,\n\nEl camión está esperando en el depósito porque el pedido no coincide con el remito. Les enviamos el documento marcado con las diferencias.\n\nPor favor confirmen las cantidades cuanto antes para evitar que el transporte regrese con la mercadería.\n\nSaludos,\nOficina Total',
+    adjuntos: [{ nombre: 'remito_pendiente.pdf', tamano: '130 KB' }],
   },
 ];
 
-const CORPUS_BLOQUE_3: Email[] = [
+const CORPUS_BLOQUE_3: PlantillaCorreo[] = [
   {
     id: 'b3c1',
     remitente: 'Carolina Funes',
-    emailRemitente: 'carolina.funes@empresa.com',
-    asunto: 'After office de hoy a las 19',
-    fechaTexto: '17 de marzo, 12:15',
+    emailRemitente: 'carolina.funes@ucu.edu.uy',
+    asunto: 'Propuesta para el encuentro del equipo',
+    fechaRelativa: 'hoy',
+    prioridad: 'baja',
     cuerpo:
-      'Holaa, les recuerdo que hoy después de las 19 nos juntamos en la terraza para el after office del mes. Va a haber algo para picar y música.\n\nSi alguien quiere sumar algo o invitar a alguien del equipo, están todos invitados.\n\nNos vemos ahí,\nCarolina',
-    clasificacion: {
-      fecha: CATEGORIA_FECHA.HOY,
-      prioridad: CATEGORIA_PRIORIDAD.PERSONAL,
-      departamento: CATEGORIA_DEPARTAMENTO.RRHH,
-    },
+      'Hola,\n\nLes comparto la propuesta para el próximo encuentro del equipo, con las opciones de lugar y menú. Pueden revisarla cuando tengan un momento y acercarme sus sugerencias.\n\nLa idea es elegir una alternativa que nos quede cómoda a todos.\n\nSaludos,\nCarolina',
+    adjuntos: [{ nombre: 'encuentro_equipo.pdf', tamano: '310 KB' }],
   },
   {
     id: 'b3c2',
     remitente: 'Ezequiel Paz',
-    emailRemitente: 'ezequiel.paz@empresa.com',
+    emailRemitente: 'ezequiel.paz@ucu.edu.uy',
     asunto: 'Necesito resolver un tema de obra social antes del jueves',
-    fechaTexto: '16 de marzo, 08:50',
+    fechaRelativa: 'anterior',
+    prioridad: 'alta',
     cuerpo:
-      'Hola,\n\nTengo un turno médico el jueves y en la obra social me dicen que figuro sin cobertura activa por un tema administrativo de la empresa. Ya llamé dos veces y no consigo que lo resuelvan del otro lado.\n\n¿Podrían gestionarlo con urgencia? Si no se resuelve antes pierdo el turno.\n\nGracias,\nEzequiel Paz',
-    clasificacion: {
-      fecha: CATEGORIA_FECHA.ESTA_SEMANA,
-      prioridad: CATEGORIA_PRIORIDAD.URGENTE,
-      departamento: CATEGORIA_DEPARTAMENTO.RRHH,
-    },
+      'Hola,\n\nTengo un turno médico el jueves y en la obra social me dicen que figuro sin cobertura activa por un tema administrativo de la universidad. Ya llamé dos veces y no consigo que lo resuelvan del otro lado.\n\n¿Podrían gestionarlo con urgencia? Si no se resuelve antes pierdo el turno.\n\nGracias,\nEzequiel Paz',
+    adjuntos: [{ nombre: 'constancia_cobertura.pdf', tamano: '145 KB' }],
   },
   {
     id: 'b3c3',
     remitente: 'Rocío Ibáñez',
-    emailRemitente: 'rocio.ibanez@empresa.com',
-    asunto: 'Aprobación del presupuesto del segundo trimestre',
-    fechaTexto: '2 de marzo, 10:00',
+    emailRemitente: 'rocio.ibanez@ucu.edu.uy',
+    asunto: 'Presupuesto propuesto para el próximo trimestre',
+    fechaRelativa: 'hoy',
+    prioridad: 'baja',
     cuerpo:
-      'Hola,\n\nAdjunto la planilla con el presupuesto propuesto para el segundo trimestre, desglosado por área. Necesitamos tu aprobación para poder cerrarlo con Dirección antes de que arranque el trimestre.\n\nCualquier ajuste que quieras hacer, decime y lo vemos juntos.\n\nSaludos,\nRocío Ibáñez',
-    adjunto: { nombre: 'presupuesto_q2.xlsx', tamano: '340 KB' },
-    clasificacion: {
-      fecha: CATEGORIA_FECHA.ESTE_MES,
-      prioridad: CATEGORIA_PRIORIDAD.PRIORITARIO,
-      departamento: CATEGORIA_DEPARTAMENTO.FINANZAS,
-    },
+      'Hola,\n\nLes comparto la planilla con el presupuesto propuesto para el próximo trimestre, desglosado por área. Es un primer borrador para revisar con tiempo antes de la reunión con Dirección.\n\nCualquier ajuste que quieran hacer, lo podemos conversar durante la revisión.\n\nSaludos,\nRocío Ibáñez',
+    adjuntos: [{ nombre: 'presupuesto_proximo_trimestre.xlsx', tamano: '340 KB' }],
   },
   {
     id: 'b3c4',
     remitente: 'Banco Rioplatense',
     emailRemitente: 'tarjetas@bancorioplatense.com.ar',
-    asunto: 'Tu empresa puede acceder a la tarjeta corporativa Rioplatense Business',
-    fechaTexto: '28 de enero, 09:30',
+    asunto: 'Validación necesaria para liberar la tarjeta corporativa',
+    fechaRelativa: 'hoy',
+    prioridad: 'alta',
     cuerpo:
-      'Estimado cliente,\n\nQueremos contarte que tu empresa ya está preaprobada para la tarjeta corporativa Rioplatense Business, con beneficios exclusivos en viajes y sin costo de mantenimiento el primer año.\n\nSolicitala en cualquier sucursal o a través de tu ejecutivo de cuenta.\n\nBanco Rioplatense',
-    adjunto: { nombre: 'tarjeta_corporativa.pdf', tamano: '480 KB' },
-    clasificacion: {
-      fecha: CATEGORIA_FECHA.MAS_DE_UN_MES,
-      prioridad: CATEGORIA_PRIORIDAD.SPAM,
-      departamento: CATEGORIA_DEPARTAMENTO.FINANZAS,
-    },
+      'Estimados,\n\nDetectamos una diferencia en la autorización de la tarjeta corporativa y suspendimos temporalmente su uso. Enviamos el formulario para confirmar a los responsables habilitados.\n\nPor favor respondan cuanto antes para liberar los pagos de viajes que quedaron pendientes.\n\nBanco Rioplatense',
+    adjuntos: [{ nombre: 'tarjeta_corporativa.pdf', tamano: '480 KB' }],
   },
   {
     id: 'b3c5',
     remitente: 'Santiago Molina',
-    emailRemitente: 'santiago.molina@empresa.com',
+    emailRemitente: 'santiago.molina@ucu.edu.uy',
     asunto: 'El sistema de facturación se cayó, nadie puede emitir comprobantes',
-    fechaTexto: '17 de marzo, 11:35',
+    fechaRelativa: 'anterior',
+    prioridad: 'alta',
     cuerpo:
       'Hola,\n\nDesde hace una hora el sistema de facturación no responde y ya se está acumulando una fila de clientes esperando su comprobante en el local. Reinicié el servicio dos veces y sigue igual.\n\nNecesito que alguien de guardia lo revise ya, esto está parando la operación.\n\nGracias,\nSantiago Molina',
-    clasificacion: {
-      fecha: CATEGORIA_FECHA.HOY,
-      prioridad: CATEGORIA_PRIORIDAD.URGENTE,
-      departamento: CATEGORIA_DEPARTAMENTO.SOPORTE_TECNICO,
-    },
+    adjuntos: [{ nombre: 'registro_facturacion.txt', tamano: '24 KB' }],
   },
   {
     id: 'b3c6',
     remitente: 'Antonella Castro',
-    emailRemitente: 'antonella.castro@empresa.com',
-    asunto: '¿Tenés un adaptador HDMI de sobra?',
-    fechaTexto: '16 de marzo, 15:45',
+    emailRemitente: 'antonella.castro@ucu.edu.uy',
+    asunto: 'Modelo de adaptador para la sala de reuniones',
+    fechaRelativa: 'hoy',
+    prioridad: 'baja',
     cuerpo:
-      'Hola! Perdí el adaptador HDMI que usaba para la sala de reuniones y tengo una presentación importante mañana. ¿No tenés uno de sobra que me puedas prestar?\n\nCon que me lo dejes en mi escritorio ya me sirve, gracias total.\n\nSaludos,\nAntonella',
-    clasificacion: {
-      fecha: CATEGORIA_FECHA.ESTA_SEMANA,
-      prioridad: CATEGORIA_PRIORIDAD.PERSONAL,
-      departamento: CATEGORIA_DEPARTAMENTO.SOPORTE_TECNICO,
-    },
+      'Hola,\n\nLes paso una foto del adaptador que usamos en la sala de reuniones para que puedan identificar el modelo al preparar el inventario.\n\nCuando revisen los equipos disponibles, avísenme si hay alguno de repuesto. No hace falta comprarlo todavía.\n\nGracias,\nAntonella',
+    adjuntos: [{ nombre: 'adaptador_hdmi.png', tamano: '620 KB' }],
   },
   {
     id: 'b3c7',
     remitente: 'Bruno Ortega',
-    emailRemitente: 'bruno.ortega@empresa.com',
-    asunto: 'Cotización de insumos: necesito tu visto bueno esta semana',
-    fechaTexto: '11 de marzo, 16:10',
+    emailRemitente: 'bruno.ortega@ucu.edu.uy',
+    asunto: 'Cotización de insumos: necesito tu visto bueno para liberar la compra',
+    fechaRelativa: 'anterior',
+    prioridad: 'alta',
     cuerpo:
-      'Hola,\n\nAdjunto la cotización final del proveedor para los insumos del segundo trimestre. Los precios están sujetos a confirmación hasta el viernes, así que necesitaría tu visto bueno antes de esa fecha para no perder las condiciones.\n\nCualquier duda, la charlamos cuando quieras.\n\nSaludos,\nBruno Ortega',
-    adjunto: { nombre: 'cotizacion_insumos.pdf', tamano: '205 KB' },
-    clasificacion: {
-      fecha: CATEGORIA_FECHA.ESTE_MES,
-      prioridad: CATEGORIA_PRIORIDAD.PRIORITARIO,
-      departamento: CATEGORIA_DEPARTAMENTO.COMPRAS,
-    },
+      'Hola,\n\nLes envío la cotización final del proveedor para los insumos del laboratorio. Necesitamos aprobarla de inmediato: la reserva de materiales vence al cierre del día y no hay stock alternativo.\n\nPor favor confirmen el visto bueno para asegurar la entrega.\n\nSaludos,\nBruno Ortega',
+    adjuntos: [{ nombre: 'cotizacion_insumos.pdf', tamano: '205 KB' }],
   },
   {
     id: 'b3c8',
     remitente: 'ProveeTech Insumos',
     emailRemitente: 'ventas@proveetech.com.ar',
-    asunto: 'Descuentos por volumen en insumos de oficina y tecnología',
-    fechaTexto: '3 de febrero, 10:20',
+    asunto: 'Sustitución urgente de equipos del pedido',
+    fechaRelativa: 'hoy',
+    prioridad: 'alta',
     cuerpo:
-      'Estimados,\n\nLes presentamos nuestro catálogo de insumos de oficina y tecnología para empresas, con descuentos especiales por volumen en compras superiores a 50 unidades.\n\nConsultá condiciones de pago y tiempos de entrega escribiendo a este correo.\n\nSaludos,\nProveeTech Insumos',
-    clasificacion: {
-      fecha: CATEGORIA_FECHA.MAS_DE_UN_MES,
-      prioridad: CATEGORIA_PRIORIDAD.SPAM,
-      departamento: CATEGORIA_DEPARTAMENTO.COMPRAS,
-    },
+      'Estimados,\n\nEl fabricante retiró uno de los modelos incluidos en su pedido. Les compartimos las alternativas equivalentes disponibles para despacho.\n\nNecesitamos que elijan una opción cuanto antes para mantener la fecha de entrega acordada.\n\nSaludos,\nProveeTech Insumos',
+    adjuntos: [{ nombre: 'equipos_sustitutos.xlsx', tamano: '96 KB' }],
   },
 ];
 
-function proyectarBloque(bloque: Email[]): Email[] {
-  return bloque.map((email) => ({
-    ...email,
-    fechaTexto: proyectarFechaCorreo(
-      email.fechaTexto,
-      SESSION_CONFIG.anclaCorpusISO,
-      SESSION_CONFIG.fechaReferenciaSesion,
-    ),
-  }));
+/** Regla y atributos se verifican sobre los mismos datos que se muestran. */
+export function crearCorpusSesion(referenciaSesion: Date): Email[][] {
+  return [CORPUS_BLOQUE_1, CORPUS_BLOQUE_2, CORPUS_BLOQUE_3].map((bloque, indiceBloque) =>
+    bloque.map(({ fechaRelativa, ...plantilla }, indice) => {
+      const email: Email = {
+        ...plantilla,
+        adjuntos: plantilla.adjuntos.map(archivo => ({ ...archivo })),
+        destinatario: 'Estudiante <correo de estudiante>',
+        fechaISO: crearFechaCorreo(fechaRelativa, indice, referenciaSesion),
+      };
+      const atributos = atributosCorreo(email, referenciaSesion);
+      if (Object.values(atributos).filter(Boolean).length !== 3 ||
+          !atributos[SESSION_CONFIG.ordenCriterios[indiceBloque]]) {
+        throw new Error(`Atributos incompatibles con el bloque: ${email.id}`);
+      }
+      return email;
+    }),
+  );
 }
-
-/**
- * Índice 0 = bloque 1 (fecha), índice 1 = bloque 2 (prioridad), índice 2 =
- * bloque 3 (departamento). Las fechas ya vienen reproyectadas contra hoy.
- */
-export const CORPUS_POR_BLOQUE: Email[][] = [CORPUS_BLOQUE_1, CORPUS_BLOQUE_2, CORPUS_BLOQUE_3].map(
-  proyectarBloque,
-);

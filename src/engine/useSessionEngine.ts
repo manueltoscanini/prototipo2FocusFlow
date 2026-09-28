@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { CORPUS_POR_BLOQUE } from '../config/corpus';
+import { crearCorpusSesion } from '../config/corpus';
 import { SESSION_CONFIG, TICK_INTERVALO_MS } from '../config/session.config';
 import type { CriterionId, Email } from '../domain/types';
 
@@ -22,6 +22,7 @@ export interface UseSessionEngineOptions {
   duracionesBloqueMs: number[];
   onEmailArrival: (email: Email, ctx: LlegadaContexto) => void;
   onBlockEnd: (ctx: FinBloqueContexto) => void;
+  onBlockStart?: (ctx: FinBloqueContexto) => void;
   /** `ctx` refleja el último bloque corrido, ya que la sesión termina inmediatamente después de su pausa. */
   onSessionEnd: (ctx: FinBloqueContexto) => void;
 }
@@ -33,6 +34,7 @@ export interface SessionEngineState {
   /** No debe mostrarse al participante: revelarlo arruina el paradigma. */
   criterioVigente: CriterionId;
   tiempoRestanteMs: number;
+  fechaReferenciaSesion: Date | null;
   iniciar: () => void;
   /** ms transcurridos desde el inicio de la sesión, para timestamping de eventos de UI. */
   ahoraMs: () => number;
@@ -64,6 +66,8 @@ export function useSessionEngine(options: UseSessionEngineOptions): SessionEngin
     SESSION_CONFIG.ordenCriterios[0],
   );
   const [tiempoRestanteMs, setTiempoRestanteMs] = useState(0);
+  const [fechaReferenciaSesion, setFechaReferenciaSesion] = useState<Date | null>(null);
+  const corpusRef = useRef<Email[][]>([]);
 
   const faseRef = useRef<FaseSesion>('inicio');
   const bloqueIndexRef = useRef(0);
@@ -77,9 +81,11 @@ export function useSessionEngine(options: UseSessionEngineOptions): SessionEngin
 
   const onEmailArrivalRef = useRef(options.onEmailArrival);
   const onBlockEndRef = useRef(options.onBlockEnd);
+  const onBlockStartRef = useRef(options.onBlockStart);
   const onSessionEndRef = useRef(options.onSessionEnd);
   onEmailArrivalRef.current = options.onEmailArrival;
   onBlockEndRef.current = options.onBlockEnd;
+  onBlockStartRef.current = options.onBlockStart;
   onSessionEndRef.current = options.onSessionEnd;
 
   const duracionBloque = useCallback(
@@ -105,11 +111,16 @@ export function useSessionEngine(options: UseSessionEngineOptions): SessionEngin
       setBloqueNumero(indice + 1);
       setCriterioVigente(SESSION_CONFIG.ordenCriterios[indice]);
       setTiempoRestanteMs(duracion);
+      onBlockStartRef.current?.({ bloqueNumero: indice + 1, criterioVigente: SESSION_CONFIG.ordenCriterios[indice] });
     },
     [duracionBloque],
   );
 
   const iniciar = useCallback(() => {
+    if (faseRef.current !== 'inicio') return;
+    const referencia = new Date();
+    corpusRef.current = crearCorpusSesion(referencia);
+    setFechaReferenciaSesion(referencia);
     const ahora = performance.now();
     sessionStartRef.current = ahora;
     iniciarBloque(0, ahora);
@@ -147,7 +158,7 @@ export function useSessionEngine(options: UseSessionEngineOptions): SessionEngin
         const elapsed = ahora - phaseStartRef.current;
         const indice = bloqueIndexRef.current;
         const criterio = SESSION_CONFIG.ordenCriterios[indice];
-        const correos = CORPUS_POR_BLOQUE[indice];
+        const correos = corpusRef.current[indice];
         const duracion = duracionBloque(indice);
 
         offsetsLlegadaRef.current.forEach((offset, i) => {
@@ -199,6 +210,7 @@ export function useSessionEngine(options: UseSessionEngineOptions): SessionEngin
     bloqueNumero,
     criterioVigente,
     tiempoRestanteMs,
+    fechaReferenciaSesion,
     iniciar,
     ahoraMs,
     forzarFinDeBloque,

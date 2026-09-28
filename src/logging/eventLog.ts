@@ -1,6 +1,6 @@
 import type { DistractorLevel } from '../config/distractors.config';
 import type { ClassificationResult } from '../domain/classification';
-import type { CriterionId, Email } from '../domain/types';
+import type { CriterionId, Email, ResponseId } from '../domain/types';
 
 interface CamposComunes {
   participante: string;
@@ -16,9 +16,8 @@ interface CamposComunes {
 export interface AttemptEvent extends CamposComunes {
   tipo: 'intento';
   tPrimeraAperturaMs: number;
-  tDropMs: number;
-  pestanaActiva: CriterionId;
-  carpetaDestino: string;
+  tRespuestaMs: number;
+  botonRespuesta: ResponseId;
   correcto: boolean;
   tiempoReaccionMs: number;
   intentoNro: number;
@@ -45,9 +44,8 @@ export function crearEventoIntento(params: {
   tLlegadaMs: number;
   tPrimeraAperturaMs: number;
   tUltimaAperturaMs: number;
-  tDropMs: number;
-  pestanaActiva: CriterionId;
-  carpetaDestino: string;
+  tRespuestaMs: number;
+  botonRespuesta: ResponseId;
   resultado: ClassificationResult;
   intentoNro: number;
 }): AttemptEvent {
@@ -61,11 +59,10 @@ export function crearEventoIntento(params: {
     asunto: params.email.asunto,
     tLlegadaMs: params.tLlegadaMs,
     tPrimeraAperturaMs: params.tPrimeraAperturaMs,
-    tDropMs: params.tDropMs,
-    pestanaActiva: params.pestanaActiva,
-    carpetaDestino: params.carpetaDestino,
+    tRespuestaMs: params.tRespuestaMs,
+    botonRespuesta: params.botonRespuesta,
     correcto: params.resultado.correcto,
-    tiempoReaccionMs: params.tDropMs - params.tUltimaAperturaMs,
+    tiempoReaccionMs: params.tRespuestaMs - params.tUltimaAperturaMs,
     intentoNro: params.intentoNro,
     tipoError: params.resultado.tipoError,
     timestampIso: new Date().toISOString(),

@@ -5,7 +5,7 @@ una aplicación de escritorio virtual, para validar la experiencia de
 interacción y la estructura de la tarea antes de implementarla en Unity.
 
 La tarea combina dos paradigmas: una bandeja de entrada de correo simulada
-(tres columnas, drag and drop) sobre una estructura de bloques inspirada en
+(bandeja lateral, lector y cuatro botones directos) sobre una estructura de bloques inspirada en
 el Berg's Card Sorting Test — el criterio de clasificación cambia sin aviso
 cada bloque y el participante debe inferir el cambio a partir del feedback
 de error.
@@ -24,8 +24,8 @@ npm run dev
 ```
 
 Esto levanta un servidor de desarrollo (Vite) en `http://localhost:5173`.
-Abrí esa URL en el navegador; la sesión se controla enteramente con mouse
-(drag and drop) desde ahí.
+Abrí esa URL en el navegador; se puede responder con mouse, pantalla táctil
+o teclado (Tab y Enter/Espacio).
 
 Otros comandos disponibles:
 
@@ -33,29 +33,29 @@ Otros comandos disponibles:
 npm run build     # build de producción a dist/
 npm run preview   # sirve el build de producción localmente
 npm run lint      # linting con oxlint
+npm test          # pruebas de dominio, interfaz, sesión, CSV y distractores
 ```
 
 ## Cómo correr la sesión
 
-1. Pantalla de inicio: permite fijar la duración (en minutos) de cada uno de
-   los 3 bloques antes de arrancar → botón **Comenzar**.
-2. Bloque 1: llega un correo automáticamente y se abre solo. A partir de ahí
-   llegan 7 correos más, repartidos en partes iguales a lo largo de la
-   duración configurada para ese bloque. El correo abierto es arrastrable a
-   cualquiera de las 4 carpetas de la pestaña activa (columna derecha). Se
-   puede cambiar de pestaña (Fecha / Prioridad / Departamento) en cualquier
-   momento. Un timer arriba a la derecha muestra cuánto tiempo lleva
-   transcurrido de la sesión.
-3. Al agotarse la duración del bloque, este termina y —sin ningún aviso—
-   arranca el siguiente con un criterio de clasificación distinto. Los
-   correos que quedaron sin clasificar NO desaparecen: siguen en la bandeja
-   y pasan a evaluarse contra el nuevo criterio vigente (cada correo del
-   corpus ya tiene asignada su categoría correcta bajo los tres criterios a
-   la vez). La pestaña seleccionada tampoco se reinicia entre bloques.
-4. Al terminar los 3 bloques se muestra un resumen de la sesión con un botón
-   para descargar el CSV con el registro completo de eventos. Recién ahí se
-   registran como `no_clasificado` los correos que nunca se llegaron a
-   clasificar.
+1. Ingresar el participante. El personal del estudio puede desplegar la
+   configuración administrativa para ajustar duración, distractores y volumen.
+   Al pulsar **Comenzar** se captura una fecha de referencia única.
+2. El primer correo se abre automáticamente. Llegan ocho correos por bloque,
+   distribuidos según su duración. Abrir un mensaje y pulsar una respuesta:
+   **Tiene adjunto · Urgente · Interno UCU · Hoy**. El orden visual es fijo.
+3. Una respuesta verde dura 500 ms y retira el correo; una roja dura 1.200 ms
+   y permite reintentar el mismo mensaje. Durante ese tiempo no se puede
+   responder ni cambiar el correo seleccionado. Cada respuesta aceptada genera
+   un intento, incluidos todos los errores.
+4. Las reglas son **Interno UCU → Urgente → Tiene adjunto**, sin anuncios al
+   participante. Se conserva el avance por duración o cinco aciertos acumulados,
+   la pausa de cinco segundos y el calendario de llegadas. En la pausa no se
+   aceptan respuestas. Los pendientes compatibles permanecen; los incompatibles
+   se retiran al comenzar el bloque siguiente y se registran como no clasificados
+   bajo el bloque anterior.
+5. Al terminar, el resumen permite descargar el CSV y comenzar otra sesión.
+   Los pendientes finales también se registran como `no_clasificado`.
 
 ## Dónde se ajusta cada parámetro de la tarea
 
@@ -68,26 +68,25 @@ parámetros implica editar únicamente el archivo correspondiente.
 |---|---|
 | Duración por defecto de un bloque (minutos) | `duracionBloqueMinDefault` en [`src/config/session.config.ts`](src/config/session.config.ts) — editable por bloque desde la pantalla de inicio en tiempo de ejecución |
 | Intervalo entre llegadas de correos | No se configura directamente: se recalcula como `duración del bloque / correosPorBloque`, así siempre respeta los minutos configurados |
-| Cantidad de correos por bloque | `correosPorBloque` (también determina cuántos correos de cada `CORPUS_POR_BLOQUE` se usan) |
+| Cantidad de correos por bloque | `correosPorBloque`; mantenerlo consistente con las ocho plantillas de cada bloque |
 | Duración de la pausa entre bloques | `pausaEntreBloquesMs` |
 | Orden de los criterios a lo largo de los bloques | `ordenCriterios` |
 | Identificador de participante por defecto | `participanteDefault` |
-| Fecha ancla contra la que está redactado el corpus | `anclaCorpusISO` — ver [`src/domain/fechaCorreo.ts`](src/domain/fechaCorreo.ts): en tiempo de ejecución cada fecha de correo se reproyecta contra `fechaReferenciaSesion` (hoy) para que la bandeja siempre luzca actual |
+| Fechas relativas y formato es-UY | [`src/domain/fechaCorreo.ts`](src/domain/fechaCorreo.ts); referencia capturada al comenzar, calendario en `America/Montevideo` |
 | Frecuencia de refresco del reloj interno de la sesión | `TICK_INTERVALO_MS` |
-| Rótulos, íconos o categorías de un criterio | [`src/config/criteria.config.ts`](src/config/criteria.config.ts) — `CRITERIOS` |
-| Contenido del corpus (remitente, asunto, cuerpo, clasificación, adjunto) | [`src/config/corpus.ts`](src/config/corpus.ts) — `CORPUS_POR_BLOQUE`. Las fechas se escriben contra `anclaCorpusISO` (ver arriba), no contra la fecha real |
+| Rótulos, iconos y orden fijo de respuestas | [`src/config/criteria.config.ts`](src/config/criteria.config.ts) — `OPCIONES` |
+| Contenido del corpus (remitente, asunto, cuerpo, prioridad, archivos) | [`src/config/corpus.ts`](src/config/corpus.ts) — `crearCorpusSesion`; materializa fechas relativas al inicio |
+| Dominio interno y cálculo de los cuatro atributos | [`src/domain/attributes.ts`](src/domain/attributes.ts) — dominio exacto `ucu.edu.uy`, prioridad alta, lista de archivos y mismo día calendario que la referencia |
+| Exposición máxima de cada distractor | `DISTRACTOR_DURACION_MS` en [`src/config/distractors.config.ts`](src/config/distractors.config.ts): 9.000 ms desde el montaje visible; cierre manual con X conservado |
 | Regla de qué hace correcta una clasificación | [`src/domain/classification.ts`](src/domain/classification.ts) — `evaluarClasificacion` (no debería necesitar cambios; es la lógica del paradigma) |
 | Columnas o formato del CSV exportado | [`src/logging/csvExporter.ts`](src/logging/csvExporter.ts) |
 
-Si se agrega una categoría a un criterio, agregar también un ícono válido en
-`ICONOS` dentro de [`src/components/folders/iconRegistry.tsx`](src/components/folders/iconRegistry.tsx)
-(usa nombres de [lucide-react](https://lucide.dev/icons/)).
-
-Si se agregan o quitan correos del corpus, cada `Email` requiere las tres
-claves de `clasificacion` (`fecha`, `prioridad`, `departamento`) con un id de
-categoría válido para ese criterio — el tipo `Email` en
-[`src/domain/types.ts`](src/domain/types.ts) lo exige en tiempo de
-compilación.
+Cada correo debe cumplir exactamente tres atributos y la regla del bloque.
+La fábrica del corpus comprueba ambas condiciones. Los adjuntos se deducen
+de `adjuntos.length`, no del DOM; la condición interna se deduce del dominio
+completo, sin distinguir mayúsculas y sin etiquetas en la interfaz. `Hoy`
+compara año, mes y día en Montevideo con la referencia inmutable de la sesión.
+El corpus incluye mensajes de ese día y de días anteriores, nunca del futuro.
 
 ## Estructura del proyecto
 
@@ -98,11 +97,11 @@ src/
   engine/            Hooks de estado: máquina de estados de la sesión y bandeja
   logging/           Registro de eventos en memoria y exportación a CSV
   components/
-    layout/          Encabezado y grilla de tres columnas
-    inbox/           Bandeja de entrada y sus ítems (drag source)
+    layout/          Encabezado y grilla de bandeja (25%) y área principal (75%)
+    inbox/           Bandeja de entrada y selección de mensajes
     reader/          Columna de lectura del correo abierto
-    folders/         Pestañas de criterio y carpetas (drop targets)
-    feedback/        Toast de error de clasificación
+    classification/  Cuatro respuestas directas con devolución verde/roja
+    distractors/     Popups, sonido y cierre manual o automático a los 9 segundos
     screens/         Pantalla de inicio y pantalla de resumen
   App.tsx            Composición: conecta engine + bandeja + registro + UI
 ```
@@ -110,25 +109,35 @@ src/
 ## Registro de eventos (CSV)
 
 Cada intento de clasificación (correcto o no) genera una fila. Los correos
-que nunca se llegaron a clasificar en toda la sesión generan una fila propia
-al finalizar el último bloque, con `tipo_error = no_clasificado` y los
-campos de drop vacíos (mientras la sesión sigue corriendo, un correo sin
-clasificar permanece en la bandeja y puede reintentarse bajo el criterio del
-bloque que esté vigente en ese momento). Los timestamps (`t_llegada_ms`,
-`t_primera_apertura_ms`, `t_drop_ms`, `tiempo_reaccion_ms`) están en
-milisegundos relativos al inicio de la sesión; `timestamp_iso` es además un
-timestamp absoluto ISO 8601 por evento.
+que quedan pendientes al terminar o se retiran por incompatibilidad con la
+siguiente regla generan una fila `no_clasificado`, con campos de respuesta
+vacíos. Los timestamps `t_llegada_ms`, `t_primera_apertura_ms` y `t_respuesta_ms`
+son relativos al inicio; `tiempo_reaccion_ms` conserva la diferencia entre la
+respuesta y la última apertura. `timestamp_iso` es absoluto.
 
-`tipo_error` distingue `ninguno` / `categoria_incorrecta` (pestaña correcta,
-carpeta incorrecta) / `criterio_incorrecto` (pestaña equivocada) /
-`no_clasificado` (nunca clasificado en toda la sesión) — esta distinción es
-la que permite ver si el participante persiste en el criterio del bloque
-anterior después de un cambio.
+Se mantienen 16 columnas en el mismo orden. Las posiciones 9–11 reemplazan
+`t_drop_ms`, `pestana_activa`, `carpeta_destino` por `t_respuesta_ms`, `boton_id`,
+`boton_respuesta`. `criterio_vigente` exporta Interno UCU, Urgente o Tiene adjunto.
+La respuesta temporal ahora exporta `hoy` en `boton_id` y `Hoy` en
+`boton_respuesta`; la clave interna `interno` se conserva.
+`tipo_error` usa `ninguno`, `criterio_incorrecto` o `no_clasificado`.
+El formato sigue siendo comas, CRLF, escape de comillas, UTF-8 con BOM y
+descarga `focusflow_sesion.csv` mediante Blob y URL temporal.
+
+`distractor_bloque` conserva los niveles asignados unidos por `+`, o `ninguno`.
+El sistema anterior no registraba eventos individuales de aparición/cierre
+de popups, ni filas separadas de cambio de regla, ni un identificador de sesión:
+se conserva ese alcance. Cada descarga corresponde a una sesión y los cambios
+se identifican por las columnas de bloque y criterio de los eventos.
+
+La X y el vencimiento de 9 segundos comparten un cierre protegido contra
+duplicados. Cerrar manualmente cancela el temporizador. El próximo popup se
+agenda 20 segundos después del cierre, como antes; se conservan contenido,
+sonido, orden, niveles por bloque y funcionamiento durante las pausas.
 
 ## Fuera de alcance en esta versión
 
-Por diseño, no incluye: estímulos distractores, pantalla de instrucciones,
-captura de identificador de participante, ni persistencia en backend. El
-modelo de datos (`participante` fijo en `SESSION_CONFIG.participanteDefault`)
-ya está preparado para incorporar una pantalla de ingreso de identificador
-más adelante sin cambios estructurales.
+No incluye persistencia en backend ni archivos binarios para los adjuntos
+simulados. Incluye distractores, instrucciones iniciales e identificador
+de participante. La interacción física en VR y la validez del protocolo
+requieren evaluación del equipo del estudio.

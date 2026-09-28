@@ -70,8 +70,8 @@ export function StartScreen({
         </div>
         <h1 className="text-2xl font-semibold text-slate-900">FocusFlow</h1>
         <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-slate-500">
-          Vas a recibir correos en tu bandeja de entrada. Abrilos y arrastralos a la carpeta que
-          corresponda, en la columna de la derecha.
+          Vas a recibir correos en tu bandeja de entrada. Abrilos y presioná una de las cuatro
+          opciones debajo del mensaje. Si la respuesta es incorrecta, podés volver a intentarlo.
         </p>
 
         <div className="mt-6 rounded-xl border border-slate-200 bg-slate-50 p-4 text-left">
@@ -91,6 +91,10 @@ export function StartScreen({
           />
         </div>
 
+        <details className="mt-4 text-left">
+          <summary className="cursor-pointer rounded-lg px-2 py-2 text-sm font-medium text-slate-600 focus-visible:outline-2 focus-visible:outline-blue-600">
+            Configuración del estudio (administración)
+          </summary>
         <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4 text-left">
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
             Configuración por bloque
@@ -195,6 +199,8 @@ export function StartScreen({
             })}
           </div>
         </div>
+
+        </details>
 
         <button
           type="button"

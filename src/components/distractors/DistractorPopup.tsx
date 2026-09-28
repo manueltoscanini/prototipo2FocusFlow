@@ -1,6 +1,6 @@
 import { type LucideIcon, Megaphone, RefreshCw, ShieldAlert, X } from 'lucide-react';
-import { useEffect } from 'react';
-import { DISTRACTOR_CONTENIDO, type DistractorLevel } from '../../config/distractors.config';
+import { useCallback, useEffect, useRef } from 'react';
+import { DISTRACTOR_CONTENIDO, DISTRACTOR_DURACION_MS, type DistractorLevel } from '../../config/distractors.config';
 import { reproducirSonidoPopup } from './popupSound';
 
 interface DistractorPopupProps {
@@ -52,10 +52,34 @@ const ESTILO_POR_NIVEL: Record<DistractorLevel, EstiloNivel> = {
  * Pop-up distractor no modal: no bloquea el resto de la pantalla ni roba
  * foco, para que distraiga sin desviar al participante de la bandeja.
  */
-export function DistractorPopup({ popupId, nivel, volumenPct, onClose }: DistractorPopupProps) {
+export function DistractorPopup({ popupId, nivel, volumenPct, onClose: notificarCierre }: DistractorPopupProps) {
   const contenido = DISTRACTOR_CONTENIDO[nivel];
   const estilo = ESTILO_POR_NIVEL[nivel];
   const Icono = estilo.Icono;
+
+  const cerradoRef = useRef(false);
+  const cierreTimeoutRef = useRef<number | null>(null);
+  const notificarCierreRef = useRef(notificarCierre);
+  notificarCierreRef.current = notificarCierre;
+
+  // La X y el vencimiento comparten un cerrojo síncrono por aparición.
+  const onClose = useCallback(() => {
+    if (cerradoRef.current) return;
+    cerradoRef.current = true;
+    if (cierreTimeoutRef.current !== null) window.clearTimeout(cierreTimeoutRef.current);
+    cierreTimeoutRef.current = null;
+    notificarCierreRef.current();
+  }, []);
+
+  useEffect(() => {
+    cerradoRef.current = false;
+    cierreTimeoutRef.current = window.setTimeout(onClose, DISTRACTOR_DURACION_MS);
+    return () => {
+      cerradoRef.current = true;
+      if (cierreTimeoutRef.current !== null) window.clearTimeout(cierreTimeoutRef.current);
+      cierreTimeoutRef.current = null;
+    };
+  }, [popupId, onClose]);
 
   useEffect(() => {
     reproducirSonidoPopup(nivel, volumenPct);

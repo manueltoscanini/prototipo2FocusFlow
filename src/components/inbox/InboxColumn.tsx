@@ -6,6 +6,7 @@ interface InboxColumnProps {
   items: InboxItemState[];
   seleccionadoId: string | null;
   recienClasificadoId: string | null;
+  disabled: boolean;
   onAbrir: (id: string) => void;
 }
 
@@ -13,10 +14,11 @@ export function InboxColumn({
   items,
   seleccionadoId,
   recienClasificadoId,
+  disabled,
   onAbrir,
 }: InboxColumnProps) {
   return (
-    <section className="flex min-h-0 flex-col rounded-2xl border border-slate-200 bg-white shadow-sm">
+    <section aria-label="Bandeja de entrada" className="flex min-h-0 flex-col rounded-2xl border border-slate-200 bg-white shadow-sm">
       <header className="flex flex-none items-center gap-2 border-b border-slate-200 px-4 py-3">
         <Inbox size={16} className="text-slate-400" />
         <h2 className="text-sm font-semibold text-slate-900">Bandeja de entrada</h2>
@@ -36,6 +38,7 @@ export function InboxColumn({
             item={item}
             seleccionado={item.email.id === seleccionadoId}
             recienClasificado={item.email.id === recienClasificadoId}
+            disabled={disabled}
             onAbrir={onAbrir}
           />
         ))}

@@ -1,54 +1,52 @@
-import { useDraggable } from '@dnd-kit/core';
-import { CheckCircle2 } from 'lucide-react';
+import { CheckCircle2, Flag, Paperclip } from 'lucide-react';
+import { tieneAdjunto } from '../../domain/attributes';
+import { formatearFechaCorreo } from '../../domain/fechaCorreo';
 import type { InboxItemState } from '../../engine/useEmailQueue';
 
 interface InboxItemProps {
   item: InboxItemState;
   seleccionado: boolean;
   recienClasificado: boolean;
+  disabled: boolean;
   onAbrir: (id: string) => void;
 }
 
-export function InboxItem({ item, seleccionado, recienClasificado, onAbrir }: InboxItemProps) {
+export function InboxItem({ item, seleccionado, recienClasificado, disabled, onAbrir }: InboxItemProps) {
   const abierto = item.firstOpenedTsMs !== null;
-  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
-    id: item.email.id,
-    disabled: !abierto,
-  });
 
   const abrir = () => onAbrir(item.email.id);
 
   return (
-    <div
-      ref={setNodeRef}
-      {...(abierto ? listeners : {})}
-      {...(abierto ? attributes : {})}
-      role="button"
-      tabIndex={0}
+    <button
+      type="button"
+      disabled={disabled}
+      aria-current={seleccionado ? 'true' : undefined}
       onClick={abrir}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          abrir();
-        }
-      }}
       className={[
-        'group relative animate-inbox-in select-none rounded-xl border p-3 outline-none transition-colors',
+        'group relative w-full animate-inbox-in rounded-xl border p-4 text-left transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 disabled:cursor-default',
         seleccionado
           ? 'border-blue-300 bg-blue-50'
           : 'border-slate-200 bg-white hover:border-slate-300',
-        abierto ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer',
-        isDragging ? 'opacity-40' : '',
+        'cursor-pointer',
         recienClasificado ? 'animate-inbox-success' : '',
       ].join(' ')}
     >
       <div className="flex items-start gap-2">
         {!abierto && <span className="mt-1.5 h-2 w-2 flex-none rounded-full bg-blue-500" />}
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-medium text-slate-900">{item.email.remitente}</p>
-          <p className="truncate text-sm text-slate-500">{item.email.asunto}</p>
+          <p className="text-base font-semibold text-slate-900">{item.email.remitente}</p>
+          <p className="mt-1 text-sm font-medium text-slate-800">{item.email.asunto}</p>
         </div>
         {recienClasificado && <CheckCircle2 size={18} className="flex-none text-emerald-500" />}
+      </div>
+      <p className="mt-2 line-clamp-2 text-sm leading-relaxed text-slate-500">
+        {item.email.cuerpo.replace(/\s+/g, ' ')}
+      </p>
+      <div className="mt-3 flex items-center gap-2 text-xs text-slate-500">
+        <time dateTime={item.email.fechaISO}>{formatearFechaCorreo(item.email.fechaISO, true)}</time>
+        <Flag size={16} aria-label={`Prioridad ${item.email.prioridad}`}
+          className={`ml-auto ${item.email.prioridad === 'alta' ? 'fill-red-100 text-red-600' : 'text-slate-500'}`} />
+        {tieneAdjunto(item.email) && <Paperclip size={16} aria-label="Archivo adjunto" />}
       </div>
       <span
         className={[
@@ -58,6 +56,6 @@ export function InboxItem({ item, seleccionado, recienClasificado, onAbrir }: In
       >
         {abierto ? 'Sin clasificar' : 'No leído'}
       </span>
-    </div>
+    </button>
   );
 }

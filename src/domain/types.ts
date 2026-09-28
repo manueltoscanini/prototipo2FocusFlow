@@ -1,4 +1,5 @@
-export type CriterionId = 'fecha' | 'prioridad' | 'departamento';
+export type CriterionId = 'interno' | 'urgente' | 'adjunto';
+export type ResponseId = CriterionId | 'hoy';
 
 export interface EmailAttachment {
   nombre: string;
@@ -10,32 +11,25 @@ export interface Email {
   remitente: string;
   emailRemitente: string;
   asunto: string;
-  fechaTexto: string;
+  destinatario: string;
+  fechaISO: string;
+  prioridad: 'alta' | 'baja';
   cuerpo: string;
-  adjunto?: EmailAttachment;
-  clasificacion: Record<CriterionId, string>;
+  adjuntos: EmailAttachment[];
 }
 
-export interface CriterionCategory {
-  id: string;
+export interface ClassificationOption {
+  id: ResponseId;
   etiqueta: string;
   icono: string;
 }
 
-export interface Criterion {
-  id: CriterionId;
-  etiqueta: string;
-  categorias: CriterionCategory[];
-}
-
 /**
  * `ninguno` clasificación correcta.
- * `categoria_incorrecta` pestaña correcta, carpeta incorrecta.
- * `criterio_incorrecto` pestaña activa distinta del criterio vigente del bloque.
+ * `criterio_incorrecto` botón distinto de la regla vigente del bloque.
  * `no_clasificado` el correo fue descartado al cierre del bloque sin clasificar.
  */
 export type TipoError =
   | 'ninguno'
-  | 'categoria_incorrecta'
   | 'criterio_incorrecto'
   | 'no_clasificado';

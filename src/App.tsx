@@ -1,16 +1,7 @@
-import {
-  closestCenter,
-  DndContext,
-  type DragEndEvent,
-  DragOverlay,
-  type DragStartEvent,
-  PointerSensor,
-  useSensor,
-  useSensors,
-} from '@dnd-kit/core';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { ClassificationPanel, type FeedbackRespuesta } from './components/classification/ClassificationPanel';
+import { atributosCorreo } from './domain/attributes';
 import { DistractorPopup } from './components/distractors/DistractorPopup';
-import { FoldersColumn } from './components/folders/FoldersColumn';
 import { InboxColumn } from './components/inbox/InboxColumn';
 import { AppShell } from './components/layout/AppShell';
 import { EmailReaderColumn } from './components/reader/EmailReaderColumn';
@@ -23,7 +14,7 @@ import {
 } from './config/distractors.config';
 import { SESSION_CONFIG } from './config/session.config';
 import { evaluarClasificacion } from './domain/classification';
-import type { CriterionId } from './domain/types';
+import type { ResponseId } from './domain/types';
 import { useDistractorPopups } from './engine/useDistractorPopups';
 import { useEmailQueue } from './engine/useEmailQueue';
 import { useSessionEngine } from './engine/useSessionEngine';
@@ -60,13 +51,15 @@ function FocusFlowSesion({
 }: FocusFlowSesionProps) {
   const emailQueue = useEmailQueue();
   const [participanteId, setParticipanteId] = useState<string>(SESSION_CONFIG.participanteDefault);
-  const [pestanaActiva, setPestanaActiva] = useState<CriterionId>(SESSION_CONFIG.ordenCriterios[0]);
   const [eventos, setEventos] = useState<SessionEvent[]>([]);
   const [recienClasificadoId, setRecienClasificadoId] = useState<string | null>(null);
-  const [errorCarpetaId, setErrorCarpetaId] = useState<string | null>(null);
-  const [errorTrigger, setErrorTrigger] = useState(0);
+  const [feedback, setFeedback] = useState<FeedbackRespuesta | null>(null);
+  const respuestaBloqueadaRef = useRef(false);
+  const feedbackTimerRef = useRef<number | null>(null);
   const [aciertosBloque, setAciertosBloque] = useState(0);
-  const [activeId, setActiveId] = useState<string | null>(null);
+  useEffect(() => () => {
+    if (feedbackTimerRef.current !== null) window.clearTimeout(feedbackTimerRef.current);
+  }, []);
 
   function distractoresDelBloque(bloqueNumero: number): DistractorLevel[] {
     return distractoresPorBloque[bloqueNumero - 1] ?? [];
@@ -83,11 +76,25 @@ function FocusFlowSesion({
       const esElPrimeroDeLaSesion = ctx.esPrimerCorreoDelBloque && ctx.bloqueNumero === 1;
       emailQueue.agregarCorreo(email, ctx.arrivalTsMs, esElPrimeroDeLaSesion);
     },
-    // Al cambiar el criterio, los correos que quedaron sin clasificar NO se
-    // descartan: siguen en la bandeja y pasan a evaluarse contra el nuevo
-    // criterio vigente (evaluarClasificacion ya usa el criterio actual, no
-    // el que regía cuando el correo llegó).
     onBlockEnd: () => {},
+    onBlockStart: (ctx) => {
+      if (ctx.bloqueNumero === 1 || !engine.fechaReferenciaSesion) return;
+      // Conservamos pendientes compatibles; los demás se registran al cerrar su bloque.
+      // Se hace tras la pausa existente, cuando terminó cualquier devolución pendiente.
+      const incompatibles = emailQueue.pendientes.filter(item =>
+        !atributosCorreo(item.email, engine.fechaReferenciaSesion!)[ctx.criterioVigente]);
+      const descartes = incompatibles.map(item => crearEventoDescartado({
+        participante: participanteId,
+        bloque: ctx.bloqueNumero - 1,
+        criterioVigente: SESSION_CONFIG.ordenCriterios[ctx.bloqueNumero - 2],
+        distractorBloque: distractoresDelBloque(ctx.bloqueNumero - 1),
+        email: item.email,
+        tLlegadaMs: item.arrivalTsMs,
+        tPrimeraAperturaMs: item.firstOpenedTsMs,
+      }));
+      if (descartes.length) setEventos(prev => [...prev, ...descartes]);
+      incompatibles.forEach(item => emailQueue.removerCorreo(item.email.id));
+    },
     onSessionEnd: (ctx) => {
       const descartes = emailQueue.pendientes.map((item) =>
         crearEventoDescartado({
@@ -117,40 +124,16 @@ function FocusFlowSesion({
     setAciertosBloque(0);
   }, [engine.bloqueNumero]);
 
-  // El feedback rojo se limpia acá, no en FolderDropZone: como FoldersColumn
-  // solo renderiza las carpetas de la pestaña activa, si el timer viviera en
-  // el componente y el participante cambiara de pestaña y volviera antes de
-  // que se cumpliera, se remonta y repite la animación desde cero.
-  useEffect(() => {
-    if (errorTrigger === 0) return;
-    const id = window.setTimeout(() => setErrorCarpetaId(null), SESSION_CONFIG.errorFeedbackDuracionMs);
-    return () => window.clearTimeout(id);
-  }, [errorTrigger]);
-
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
-
-  function handleDragStart(event: DragStartEvent) {
-    setActiveId(String(event.active.id));
-  }
-
-  function handleDragEnd(event: DragEndEvent) {
-    setActiveId(null);
-
-    const emailId = String(event.active.id);
-    const carpetaDestino = event.over ? String(event.over.id) : null;
-    if (!carpetaDestino) return;
-
-    const item = emailQueue.pendientes.find((p) => p.email.id === emailId);
+  function handleResponder(botonRespuesta: ResponseId) {
+    if (respuestaBloqueadaRef.current || engine.fase !== 'bloque') return;
+    const emailId = emailQueue.correoSeleccionadoId;
+    const item = emailQueue.pendientes.find(p => p.email.id === emailId);
     if (!item || item.firstOpenedTsMs === null) return;
 
-    const resultado = evaluarClasificacion({
-      email: item.email,
-      criterioVigente: engine.criterioVigente,
-      pestanaActiva,
-      carpetaDestino,
-    });
-
-    const evento = crearEventoIntento({
+    // El cerrojo es síncrono: dos eventos antes del próximo render tampoco se duplican.
+    respuestaBloqueadaRef.current = true;
+    const resultado = evaluarClasificacion({ criterioVigente: engine.criterioVigente, botonRespuesta });
+    const datosIntento = {
       participante: participanteId,
       bloque: engine.bloqueNumero,
       criterioVigente: engine.criterioVigente,
@@ -159,30 +142,28 @@ function FocusFlowSesion({
       tLlegadaMs: item.arrivalTsMs,
       tPrimeraAperturaMs: item.firstOpenedTsMs,
       tUltimaAperturaMs: item.lastOpenedTsMs ?? item.firstOpenedTsMs,
-      tDropMs: engine.ahoraMs(),
-      pestanaActiva,
-      carpetaDestino,
+      tRespuestaMs: engine.ahoraMs(),
+      botonRespuesta,
       resultado,
-      intentoNro: contarIntentosPrevios(eventos, emailId) + 1,
-    });
-    setEventos((prev) => [...prev, evento]);
+    };
+    setEventos(prev => [...prev, crearEventoIntento({
+      ...datosIntento, intentoNro: contarIntentosPrevios(prev, item.email.id) + 1,
+    })]);
+    setFeedback({ boton: botonRespuesta, correcto: resultado.correcto });
 
     if (resultado.correcto) {
-      setRecienClasificadoId(emailId);
-      window.setTimeout(() => {
-        emailQueue.removerCorreo(emailId);
-        setRecienClasificadoId(null);
-      }, 500);
-
+      setRecienClasificadoId(item.email.id);
       const siguienteAciertos = aciertosBloque + 1;
       setAciertosBloque(siguienteAciertos);
-      if (siguienteAciertos >= SESSION_CONFIG.aciertosParaAvanzar) {
-        engine.forzarFinDeBloque();
-      }
-    } else {
-      setErrorCarpetaId(carpetaDestino);
-      setErrorTrigger((t) => t + 1);
+      if (siguienteAciertos >= SESSION_CONFIG.aciertosParaAvanzar) engine.forzarFinDeBloque();
     }
+    feedbackTimerRef.current = window.setTimeout(() => {
+      if (resultado.correcto) emailQueue.removerCorreo(item.email.id);
+      setRecienClasificadoId(null);
+      setFeedback(null);
+      respuestaBloqueadaRef.current = false;
+      feedbackTimerRef.current = null;
+    }, resultado.correcto ? SESSION_CONFIG.aciertoFeedbackDuracionMs : SESSION_CONFIG.errorFeedbackDuracionMs);
   }
 
   function handleVolverAlInicio() {
@@ -221,42 +202,25 @@ function FocusFlowSesion({
 
   const correoAbierto =
     emailQueue.pendientes.find((p) => p.email.id === emailQueue.correoSeleccionadoId) ?? null;
-  const activeItem = activeId
-    ? (emailQueue.pendientes.find((p) => p.email.id === activeId) ?? null)
-    : null;
-
   return (
-    <DndContext
-      sensors={sensors}
-      collisionDetection={closestCenter}
-      onDragStart={handleDragStart}
-      onDragEnd={handleDragEnd}
-    >
+    <>
       <AppShell onVolverAlInicio={handleVolverAlInicio}>
         <InboxColumn
           items={emailQueue.pendientes}
           seleccionadoId={emailQueue.correoSeleccionadoId}
           recienClasificadoId={recienClasificadoId}
+          disabled={feedback !== null}
           onAbrir={(id) => emailQueue.abrirCorreo(id, engine.ahoraMs())}
         />
-        <EmailReaderColumn item={correoAbierto} />
-        <FoldersColumn
-          pestanaActiva={pestanaActiva}
-          onCambiarPestana={setPestanaActiva}
-          errorCarpetaId={errorCarpetaId}
-        />
+        <div className="flex min-h-0 min-w-0 flex-col gap-4">
+          <EmailReaderColumn item={correoAbierto} />
+          <ClassificationPanel
+            disabled={!correoAbierto || feedback !== null || engine.fase !== 'bloque'}
+            feedback={feedback}
+            onResponder={handleResponder}
+          />
+        </div>
       </AppShell>
-
-      <DragOverlay>
-        {activeItem ? (
-          <div className="w-72 rounded-xl border border-blue-300 bg-white p-3 shadow-lg">
-            <p className="truncate text-sm font-medium text-slate-900">
-              {activeItem.email.remitente}
-            </p>
-            <p className="truncate text-sm text-slate-500">{activeItem.email.asunto}</p>
-          </div>
-        ) : null}
-      </DragOverlay>
 
       {distractores.popup && (
         <DistractorPopup
@@ -267,7 +231,7 @@ function FocusFlowSesion({
           onClose={distractores.cerrar}
         />
       )}
-    </DndContext>
+    </>
   );
 }
 

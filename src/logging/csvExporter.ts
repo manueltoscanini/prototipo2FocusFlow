@@ -1,4 +1,5 @@
 import type { SessionEvent } from './eventLog';
+import { etiquetaRespuesta } from '../config/criteria.config';
 
 const COLUMNAS = [
   'participante',
@@ -9,9 +10,9 @@ const COLUMNAS = [
   'asunto',
   't_llegada_ms',
   't_primera_apertura_ms',
-  't_drop_ms',
-  'pestana_activa',
-  'carpeta_destino',
+  't_respuesta_ms',
+  'boton_id',
+  'boton_respuesta',
   'correcto',
   'tiempo_reaccion_ms',
   'intento_nro',
@@ -37,7 +38,7 @@ function eventoAFila(evento: SessionEvent): (string | number | boolean | null)[]
   const comunes = [
     evento.participante,
     evento.bloque,
-    evento.criterioVigente,
+    etiquetaRespuesta(evento.criterioVigente),
     formatearDistractorBloque(evento.distractorBloque),
     evento.idCorreo,
     evento.asunto,
@@ -62,9 +63,9 @@ function eventoAFila(evento: SessionEvent): (string | number | boolean | null)[]
   return [
     ...comunes,
     evento.tPrimeraAperturaMs,
-    evento.tDropMs,
-    evento.pestanaActiva,
-    evento.carpetaDestino,
+    evento.tRespuestaMs,
+    evento.botonRespuesta,
+    etiquetaRespuesta(evento.botonRespuesta),
     evento.correcto,
     evento.tiempoReaccionMs,
     evento.intentoNro,
